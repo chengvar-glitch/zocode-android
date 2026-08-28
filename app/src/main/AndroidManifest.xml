@@ -6,7 +6,7 @@
     <application
         android:icon="@mipmap/ic_launcher"
         android:label="ZCode"
-        android:theme="@style/Theme.AppCompat.Light.NoActionBar"
+        android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false">
         <activity
             android:name=".MainActivity"
