@@ -74,12 +74,16 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 bars = Insets.of(0, insets.getSystemWindowInsetTop(), 0, insets.getSystemWindowInsetBottom());
             }
-            // 底部导航栏区域仍用 padding 避让,顶部让内容穿过去
+            // 底部导航栏区域仍用 padding 避让,顶部让 WebView 内容穿过去
             v.setPadding(0, 0, 0, bars.bottom);
             if (scrimView != null) {
                 scrimView.getLayoutParams().height = bars.top;
                 scrimView.requestLayout();
             }
+            // 主页和加载页是居中静态内容,顶部避让状态栏,避免被盖住
+            int contentPadTop = bars.top + dp(32);
+            homeView.setPadding(dp(32), contentPadTop, dp(32), dp(32));
+            ((ViewGroup) loadingView).setPadding(0, bars.top, 0, 0);
             return insets;
         });
 
