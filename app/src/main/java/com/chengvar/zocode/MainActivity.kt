@@ -29,6 +29,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -59,6 +60,15 @@ class MainActivity : AppCompatActivity() {
         result.contents?.takeIf { it.isNotEmpty() }?.let(::loadUrl)
     }
 
+    private var filePathCallback: android.webkit.ValueCallback<Array<android.net.Uri>>? = null
+
+    private val fileChooserLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            filePathCallback?.onReceiveValue(
+                WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data))
+            filePathCallback = null
+        }
+
     private val webBackCallback = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
             if (webView.canGoBack()) {
@@ -77,15 +87,10 @@ class MainActivity : AppCompatActivity() {
             setContentView(this)
         }
 
-        // 沉浸式:系统栏透明,内容整体避让状态栏,不留割裂色块
+        // 沉浸式:系统栏透明,内容整体避让,状态栏区域就是背景色,无割裂
         root.setOnApplyWindowInsetsListener { v, insets ->
             val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
-            v.setPadding(0, 0, 0, bars.bottom)
-            // 主页/加载页是静态内容,顶部避让
-            homeView.setPadding(dp(32), bars.top + dp(32), dp(32), dp(32))
-            (loadingView as ViewGroup).setPadding(0, bars.top, 0, 0)
-            // WebView 也避让,页面内容不被状态栏盖住
-            webView.setPadding(0, bars.top, 0, 0)
+            v.setPadding(0, bars.top, 0, bars.bottom)
             scrimView.layoutParams.height = 0
             scrimView.requestLayout()
             insets
@@ -117,6 +122,18 @@ class MainActivity : AppCompatActivity() {
                 }
                 override fun onPageFinished(view: WebView, url: String) {
                     if (connecting) finishConnect(failed = mainFrameFailed)
+                }
+            }
+            webChromeClient = object : WebChromeClient() {
+                override fun onShowFileChooser(
+                    webView: WebView,
+                    callback: android.webkit.ValueCallback<Array<android.net.Uri>>,
+                    params: FileChooserParams
+                ): Boolean {
+                    filePathCallback?.onReceiveValue(null)
+                    filePathCallback = callback
+                    fileChooserLauncher.launch(params.createIntent())
+                    return true
                 }
             }
             visibility = View.GONE
