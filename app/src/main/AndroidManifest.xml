@@ -7,7 +7,8 @@
         android:icon="@mipmap/ic_launcher"
         android:label="ZCode"
         android:theme="@style/AppTheme"
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="false"
+        android:enableOnBackInvokedCallback="false">
         <activity
             android:name=".MainActivity"
             android:exported="true"
