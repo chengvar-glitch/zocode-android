@@ -1,13 +1,12 @@
 package com.chengvar.zocode;
 
-import android.annotation.SuppressLint;
-import android.app.Activity;
-import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.graphics.Insets;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.Window;
+import android.view.WindowInsets;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
@@ -16,7 +15,13 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 
-public class MainActivity extends Activity {
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.appcompat.app.AppCompatActivity;
+
+import com.journeyapps.barcodescanner.ScanContract;
+import com.journeyapps.barcodescanner.ScanOptions;
+
+public class MainActivity extends AppCompatActivity {
 
     private static final String PREFS = "zocode";
     private static final String KEY_URL = "url";
@@ -25,26 +30,57 @@ public class MainActivity extends Activity {
     private LinearLayout urlBar;
     private EditText urlInput;
 
-    @SuppressLint("SetJavaScriptEnabled")
+    private final ActivityResultLauncher<ScanOptions> scanLauncher =
+            registerForActivityResult(new ScanContract(), result -> {
+                String text = result.getContents();
+                if (text != null && !text.isEmpty()) {
+                    urlInput.setText(text);
+                    loadUrl(text);
+                }
+            });
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        requestWindowFeature(Window.FEATURE_NO_TITLE);
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(Color.WHITE);
+        setContentView(root);
+
+        // 安全区:内容避开状态栏/导航栏/刘海
+        root.setOnApplyWindowInsetsListener((v, insets) -> {
+            Insets bars;
+            if (Build.VERSION.SDK_INT >= 30) {
+                bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+            } else {
+                bars = Insets.of(0, insets.getSystemWindowInsetTop(), 0, insets.getSystemWindowInsetBottom());
+            }
+            v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+            return insets;
+        });
 
         urlBar = new LinearLayout(this);
         urlBar.setOrientation(LinearLayout.HORIZONTAL);
         urlBar.setPadding(16, 16, 16, 16);
-        urlBar.setBackgroundColor(Color.WHITE);
 
         urlInput = new EditText(this);
-        urlInput.setHint("粘贴 ZCode 远程控制链接");
+        urlInput.setHint("粘贴或扫码 ZCode 远程控制链接");
         urlInput.setSingleLine(true);
-        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        urlBar.addView(urlInput, inputParams);
+        urlBar.addView(urlInput, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        Button scanButton = new Button(this);
+        scanButton.setText("扫码");
+        scanButton.setOnClickListener(v -> {
+            ScanOptions opts = new ScanOptions();
+            opts.setDesiredBarcodeFormats(ScanOptions.QR_CODE);
+            opts.setPrompt("对准 ZCode 桌面端弹出的二维码");
+            opts.setBeepEnabled(false);
+            opts.setOrientationLocked(true);
+            scanLauncher.launch(opts);
+        });
+        urlBar.addView(scanButton);
 
         Button goButton = new Button(this);
         goButton.setText("打开");
@@ -68,10 +104,7 @@ public class MainActivity extends Activity {
         root.addView(webView, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        setContentView(root);
-
-        SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
-        String saved = prefs.getString(KEY_URL, "");
+        String saved = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_URL, "");
         urlInput.setText(saved);
         if (!saved.isEmpty()) {
             loadUrl(saved);
