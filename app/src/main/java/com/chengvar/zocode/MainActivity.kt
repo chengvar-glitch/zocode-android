@@ -77,15 +77,17 @@ class MainActivity : AppCompatActivity() {
             setContentView(this)
         }
 
-        // 沉浸式:WebView 内容延伸到状态栏下,底部导航栏避让
+        // 沉浸式:系统栏透明,内容整体避让状态栏,不留割裂色块
         root.setOnApplyWindowInsetsListener { v, insets ->
             val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
             v.setPadding(0, 0, 0, bars.bottom)
-            scrimView.layoutParams.height = bars.top
-            scrimView.requestLayout()
             // 主页/加载页是静态内容,顶部避让
             homeView.setPadding(dp(32), bars.top + dp(32), dp(32), dp(32))
             (loadingView as ViewGroup).setPadding(0, bars.top, 0, 0)
+            // WebView 也避让,页面内容不被状态栏盖住
+            webView.setPadding(0, bars.top, 0, 0)
+            scrimView.layoutParams.height = 0
+            scrimView.requestLayout()
             insets
         }
 
