@@ -45,7 +45,6 @@ public class MainActivity extends AppCompatActivity {
     private View homeView;
     private View loadingView;
     private View scrimView;
-    private EditText urlInput;
 
     private final Handler timeoutHandler = new Handler(Looper.getMainLooper());
     private boolean mainFrameFailed = false;
@@ -137,7 +136,6 @@ public class MainActivity extends AppCompatActivity {
         root.addView(scrimView, scrimParams);
 
         String saved = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_URL, "");
-        urlInput.setText(saved);
         if (!saved.isEmpty()) {
             // 启动即尝试恢复上次连接,失败则回主页
             startConnect(saved);
@@ -194,15 +192,6 @@ public class MainActivity extends AppCompatActivity {
         home.addView(text("远程控制", 15, Typeface.NORMAL, R.color.text_secondary),
                 matchWrap(Gravity.CENTER, 0, 0, 0, dp(40)));
 
-        urlInput = new EditText(this);
-        urlInput.setHint("粘贴或扫码 ZCode 远程控制链接");
-        urlInput.setSingleLine(true);
-        urlInput.setTextColor(ContextCompat.getColor(this, R.color.text_primary));
-        urlInput.setHintTextColor(ContextCompat.getColor(this, R.color.text_secondary));
-        urlInput.setBackground(ContextCompat.getDrawable(this, R.drawable.input_dark));
-        urlInput.setPadding(dp(16), dp(14), dp(16), dp(14));
-        home.addView(urlInput, matchWrap(Gravity.CENTER, 0, 0, 0, dp(16)));
-
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
 
@@ -233,24 +222,75 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showPasteDialog() {
+        final AlertDialog[] dialogRef = new AlertDialog[1];
         final EditText input = new EditText(this);
         input.setSingleLine(true);
         input.setHint("粘贴 ZCode 远程控制链接");
-        input.setText(urlInput.getText().toString());
+        input.setTextColor(ContextCompat.getColor(this, R.color.text_primary));
+        input.setHintTextColor(ContextCompat.getColor(this, R.color.text_secondary));
+        input.setBackground(ContextCompat.getDrawable(this, R.drawable.input_dark));
+        input.setPadding(dp(16), dp(14), dp(16), dp(14));
+        ClipboardManager cm = getSystemService(ClipboardManager.class);
+        if (cm != null && cm.getPrimaryClip() != null && cm.getPrimaryClip().getItemAt(0) != null
+                && cm.getPrimaryClip().getItemAt(0).getText() != null) {
+            input.setText(cm.getPrimaryClip().getItemAt(0).getText());
+        }
         input.setSelection(input.getText().length());
 
-        FrameLayout holder = new FrameLayout(this);
-        int pad = dp(20);
-        holder.setPadding(pad, dp(8), pad, 0);
-        holder.addView(input, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        int pad = dp(24);
+        box.setPadding(pad, pad, pad, dp(8));
 
-        new AlertDialog.Builder(this, androidx.appcompat.R.style.Theme_AppCompat_Dialog_Alert)
-                .setTitle("粘贴连接")
-                .setView(holder)
-                .setNegativeButton("取消", null)
-                .setPositiveButton("访问", (dialog, which) -> loadUrl(input.getText().toString().trim()))
-                .show();
+        TextView title = new TextView(this);
+        title.setText("连接 ZCode");
+        title.setTextSize(18);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTextColor(ContextCompat.getColor(this, R.color.text_primary));
+        box.addView(title, matchWrap(Gravity.START, 0, 0, 0, dp(16)));
+
+        box.addView(input, matchWrap(Gravity.CENTER, 0, 0, 0, dp(20)));
+
+        LinearLayout btnRow = new LinearLayout(this);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
+
+        Button cancel = new Button(this);
+        cancel.setText("取消");
+        cancel.setAllCaps(false);
+        cancel.setTextSize(15);
+        cancel.setTextColor(ContextCompat.getColor(this, R.color.text_secondary));
+        cancel.setBackground(ContextCompat.getDrawable(this, R.drawable.btn_dark));
+        cancel.setOnClickListener(v -> dialogRef[0].dismiss());
+        btnRow.addView(cancel, new LinearLayout.LayoutParams(0, dp(46), 1f));
+
+        Button ok = new Button(this);
+        ok.setText("访问");
+        ok.setAllCaps(false);
+        ok.setTextSize(15);
+        ok.setTypeface(Typeface.DEFAULT_BOLD);
+        ok.setTextColor(Color.parseColor("#1E1E1E"));
+        android.graphics.drawable.GradientDrawable accentBg = new android.graphics.drawable.GradientDrawable();
+        accentBg.setColor(ContextCompat.getColor(this, R.color.accent));
+        accentBg.setCornerRadius(dp(12));
+        ok.setBackground(accentBg);
+        ok.setOnClickListener(v -> {
+            dialogRef[0].dismiss();
+            loadUrl(input.getText().toString().trim());
+        });
+        LinearLayout.LayoutParams okParams = new LinearLayout.LayoutParams(0, dp(46), 1f);
+        okParams.leftMargin = dp(12);
+        btnRow.addView(ok, okParams);
+
+        box.addView(btnRow, matchWrap(Gravity.CENTER, 0, 0, 0, 0));
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setView(box)
+                .create();
+        dialogRef[0] = dialog;
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(R.drawable.dialog_dark);
+        }
+        dialog.show();
     }
 
     // ===== 页面状态切换 =====
@@ -279,7 +319,6 @@ public class MainActivity extends AppCompatActivity {
         timeoutHandler.removeCallbacksAndMessages(null);
         if (failed) {
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().remove(KEY_URL).apply();
-            urlInput.setText("");
             showOnly(homeView);
             Toast.makeText(this, "无法连接 ZCode,请重新扫码或粘贴链接", Toast.LENGTH_LONG).show();
         } else {
@@ -328,7 +367,6 @@ public class MainActivity extends AppCompatActivity {
             url = "https://" + url;
         }
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_URL, url).apply();
-        urlInput.setText(url);
         startConnect(url);
     }
 
