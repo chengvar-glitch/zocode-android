@@ -388,6 +388,4 @@ public class MainActivity extends AppCompatActivity {
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_URL, url).apply();
         startConnect(url);
     }
-
-    @Override
 }
