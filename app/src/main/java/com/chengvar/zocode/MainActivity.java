@@ -44,6 +44,7 @@ public class MainActivity extends AppCompatActivity {
     private WebView webView;
     private View homeView;
     private View loadingView;
+    private View scrimView;
     private EditText urlInput;
 
     private final Handler timeoutHandler = new Handler(Looper.getMainLooper());
@@ -62,12 +63,11 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
+        FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.parseColor("#1E1E1E"));
         setContentView(root);
 
-        // 沉浸式:系统栏透明,内容按 insets 避让
+        // 沉浸式:内容延伸到状态栏下,顶部叠一条半透明渐变遮罩(玻璃感)
         root.setOnApplyWindowInsetsListener((v, insets) -> {
             Insets bars;
             if (Build.VERSION.SDK_INT >= 30) {
@@ -75,15 +75,25 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 bars = Insets.of(0, insets.getSystemWindowInsetTop(), 0, insets.getSystemWindowInsetBottom());
             }
-            v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+            // 底部导航栏区域仍用 padding 避让,顶部让内容穿过去
+            v.setPadding(0, 0, 0, bars.bottom);
+            if (scrimView != null) {
+                scrimView.getLayoutParams().height = bars.top;
+                scrimView.requestLayout();
+            }
             return insets;
         });
 
+        LinearLayout column = new LinearLayout(this);
+        column.setOrientation(LinearLayout.VERTICAL);
+        root.addView(column, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
         homeView = buildHome();
-        root.addView(homeView, new LinearLayout.LayoutParams(
+        column.addView(homeView, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        root.addView(buildLoading(), new LinearLayout.LayoutParams(
+        column.addView(buildLoading(), new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         webView = new WebView(this);
@@ -112,8 +122,17 @@ public class MainActivity extends AppCompatActivity {
         });
         webView.setWebChromeClient(new WebChromeClient());
         webView.setVisibility(View.GONE);
-        root.addView(webView, new LinearLayout.LayoutParams(
+        column.addView(webView, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        // 顶部玻璃遮罩:盖在内容之上,高度 = 状态栏高度
+        scrimView = new View(this);
+        scrimView.setBackground(new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{0xCC1E1E1E, 0x661E1E1E, 0x001E1E1E}));
+        FrameLayout.LayoutParams scrimParams = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, Gravity.TOP);
+        root.addView(scrimView, scrimParams);
 
         String saved = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_URL, "");
         urlInput.setText(saved);
