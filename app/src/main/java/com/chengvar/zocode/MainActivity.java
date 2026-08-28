@@ -26,6 +26,7 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
@@ -44,6 +45,18 @@ public class MainActivity extends AppCompatActivity {
     private View homeView;
     private View loadingView;
     private View scrimView;
+
+    private final OnBackPressedCallback webBackCallback = new OnBackPressedCallback(false) {
+        @Override
+        public void handleOnBackPressed() {
+            if (webView.canGoBack()) {
+                webView.goBack();
+                if (!webView.canGoBack()) {
+                    showOnly(homeView);
+                }
+            }
+        }
+    };
 
     private final Handler timeoutHandler = new Handler(Looper.getMainLooper());
     private boolean mainFrameFailed = false;
@@ -99,6 +112,8 @@ public class MainActivity extends AppCompatActivity {
         webView.getSettings().setDomStorageEnabled(true);
         webView.setVerticalScrollBarEnabled(false);
         webView.setHorizontalScrollBarEnabled(false);
+        // Android 13+ 自动暗色化:网页跟随 app 深色偏好
+        webView.getSettings().setAlgorithmicDarkeningAllowed(true);
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
@@ -138,6 +153,9 @@ public class MainActivity extends AppCompatActivity {
             // 启动即尝试恢复上次连接,失败则回主页
             startConnect(saved);
         }
+
+        // 预测性返回:WebView 可后退时拦截,否则交给系统(有返回桌面动画)
+        getOnBackPressedDispatcher().addCallback(this, webBackCallback);
     }
 
     private View buildLoading() {
@@ -287,6 +305,8 @@ public class MainActivity extends AppCompatActivity {
         dialogRef[0] = dialog;
         if (dialog.getWindow() != null) {
             dialog.getWindow().setBackgroundDrawableResource(R.drawable.dialog_dark);
+            // 真·毛玻璃:模糊对话框背后的内容
+            dialog.getWindow().setBackgroundBlurRadius(60);
         }
         dialog.show();
     }
@@ -297,6 +317,7 @@ public class MainActivity extends AppCompatActivity {
         homeView.setVisibility(target == homeView ? View.VISIBLE : View.GONE);
         loadingView.setVisibility(target == loadingView ? View.VISIBLE : View.GONE);
         webView.setVisibility(target == webView ? View.VISIBLE : View.GONE);
+        webBackCallback.setEnabled(target == webView);
     }
 
     private void startConnect(String url) {
@@ -369,14 +390,4 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    public void onBackPressed() {
-        if (webView.getVisibility() == View.VISIBLE && webView.canGoBack()) {
-            webView.goBack();
-            if (!webView.canGoBack()) {
-                showOnly(homeView);
-            }
-        } else {
-            super.onBackPressed();
-        }
-    }
 }

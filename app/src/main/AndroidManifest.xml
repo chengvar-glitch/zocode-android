@@ -8,7 +8,7 @@
         android:label="ZCode"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false"
-        android:enableOnBackInvokedCallback="false">
+        android:enableOnBackInvokedCallback="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
