@@ -130,7 +130,18 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 override fun onPageFinished(view: WebView, url: String) {
-                    if (connecting) finishConnect(failed = mainFrameFailed)
+                    // 隐藏 ZCode 页面自绘的 webkit 滚动条
+                    view.evaluateJavascript(
+                        """(function(){var s=document.createElement('style');
+                        s.textContent='::-webkit-scrollbar{width:0!important;height:0!important;display:none!important}';
+                        document.head.appendChild(s)})()""",
+                        null)
+                    if (connecting) {
+                        finishConnect(failed = mainFrameFailed)
+                        mainHandler.postDelayed({
+                            android.util.Log.d("zcode", "history=${view.copyBackForwardList().size}")
+                        }, 1000)
+                    }
                 }
             }
             webChromeClient = object : WebChromeClient() {
