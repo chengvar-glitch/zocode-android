@@ -130,6 +130,7 @@ public class MainActivity extends AppCompatActivity {
             opts.setDesiredBarcodeFormats(ScanOptions.QR_CODE);
             opts.setPrompt("对准 ZCode 桌面端弹出的二维码");
             opts.setBeepEnabled(false);
+            opts.setCaptureActivity(PortraitCaptureActivity.class);
             opts.setOrientationLocked(true);
             scanLauncher.launch(opts);
         });
