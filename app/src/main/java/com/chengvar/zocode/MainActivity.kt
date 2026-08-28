@@ -43,6 +43,33 @@ class MainActivity : AppCompatActivity() {
         const val KEY_URL = "url"
         const val CONNECT_TIMEOUT_MS = 10_000L
         val BG = Color.parseColor("#1E1E1E")
+
+        // 记录 SPA 路由栈 + 合成后退;顺带隐藏页面自绘滚动条
+        val ROUTE_HOOK = """
+            (function(){
+              if(window.__zcInstalled) return;
+              window.__zcInstalled=true;
+              var s=document.createElement('style');
+              s.textContent='::-webkit-scrollbar{width:0!important;height:0!important;display:none!important}';
+              document.head.appendChild(s);
+              window.__zcRoutes=[location.href];
+              var push=history.pushState.bind(history), rep=history.replaceState.bind(history);
+              function record(){
+                var h=location.href;
+                if(window.__zcRoutes[window.__zcRoutes.length-1]!==h) window.__zcRoutes.push(h);
+              }
+              function wrap(orig){return function(){var r=orig.apply(null,arguments);record();return r;};}
+              history.pushState=wrap(push); history.replaceState=wrap(rep);
+              window.addEventListener('hashchange',record,true);
+              window.__zcBack=function(){
+                if(window.__zcRoutes.length<2) return false;
+                window.__zcRoutes.pop();
+                push(null,'',window.__zcRoutes[window.__zcRoutes.length-1]);
+                window.dispatchEvent(new PopStateEvent('popstate'));
+                return true;
+              };
+            })()
+        """.trimIndent()
     }
 
     private lateinit var webView: WebView
@@ -71,9 +98,11 @@ class MainActivity : AppCompatActivity() {
 
     private val webBackCallback = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
-            if (webView.canGoBack()) {
-                webView.goBack()
-                if (!webView.canGoBack()) showOnly(homeView)
+            when {
+                webView.canGoBack() -> webView.goBack()
+                else -> webView.evaluateJavascript("window.__zcBack ? __zcBack() : false") { handled ->
+                    if (handled != "true") showOnly(homeView)
+                }
             }
         }
     }
@@ -130,18 +159,8 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 override fun onPageFinished(view: WebView, url: String) {
-                    // 隐藏 ZCode 页面自绘的 webkit 滚动条
-                    view.evaluateJavascript(
-                        """(function(){var s=document.createElement('style');
-                        s.textContent='::-webkit-scrollbar{width:0!important;height:0!important;display:none!important}';
-                        document.head.appendChild(s)})()""",
-                        null)
-                    if (connecting) {
-                        finishConnect(failed = mainFrameFailed)
-                        mainHandler.postDelayed({
-                            android.util.Log.d("zcode", "history=${view.copyBackForwardList().size}")
-                        }, 1000)
-                    }
+                    view.evaluateJavascript(ROUTE_HOOK, null)
+                    if (connecting) finishConnect(failed = mainFrameFailed)
                 }
             }
             webChromeClient = object : WebChromeClient() {
