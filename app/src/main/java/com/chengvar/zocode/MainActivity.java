@@ -224,7 +224,7 @@ public class MainActivity extends AppCompatActivity {
         holder.addView(input, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        new AlertDialog.Builder(this, R.style.Theme_AppCompat_Dialog_Alert)
+        new AlertDialog.Builder(this, androidx.appcompat.R.style.Theme_AppCompat_Dialog_Alert)
                 .setTitle("粘贴连接")
                 .setView(holder)
                 .setNegativeButton("取消", null)
