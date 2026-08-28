@@ -5,7 +5,6 @@ import android.graphics.Color;
 import android.graphics.Insets;
 import android.graphics.PorterDuff;
 import android.graphics.Typeface;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -68,12 +67,7 @@ public class MainActivity extends AppCompatActivity {
 
         // 沉浸式:内容延伸到状态栏下,顶部叠一条半透明渐变遮罩(玻璃感)
         root.setOnApplyWindowInsetsListener((v, insets) -> {
-            Insets bars;
-            if (Build.VERSION.SDK_INT >= 30) {
-                bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
-            } else {
-                bars = Insets.of(0, insets.getSystemWindowInsetTop(), 0, insets.getSystemWindowInsetBottom());
-            }
+            Insets bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
             // 底部导航栏区域仍用 padding 避让,顶部让 WebView 内容穿过去
             v.setPadding(0, 0, 0, bars.bottom);
             if (scrimView != null) {
