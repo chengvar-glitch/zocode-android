@@ -109,6 +109,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        captureCrash()
         enableEdgeToEdge()
 
         val root = FrameLayout(this).apply {
@@ -191,6 +192,22 @@ class MainActivity : AppCompatActivity() {
         prefs.getString(KEY_URL, "")?.takeIf { it.isNotEmpty() }?.let(::startConnect)
 
         onBackPressedDispatcher.addCallback(this, webBackCallback)
+    }
+
+    private fun captureCrash() {
+        val file = java.io.File(filesDir, "crash.txt")
+        Thread.getDefaultUncaughtExceptionHandler()?.let { default ->
+            Thread.setDefaultUncaughtExceptionHandler { t, e ->
+                try {
+                    file.writeText(android.util.Log.getStackTraceString(e))
+                } catch (_: Exception) {}
+                default.uncaughtException(t, e)
+            }
+        }
+        if (file.exists()) {
+            Toast.makeText(this, file.readText().lineSequence().firstOrNull() ?: "上次崩溃", Toast.LENGTH_LONG).show()
+            file.delete()
+        }
     }
 
     private fun buildHome(): View {
@@ -296,9 +313,13 @@ class MainActivity : AppCompatActivity() {
         box.addView(btnRow, matchWrap())
 
         val dialog = AlertDialog.Builder(this).setView(box).create().apply {
-            window?.apply {
-                setBackgroundDrawableResource(R.drawable.dialog_dark)
-                setBackgroundBlurRadius(60) // 真·毛玻璃
+            window?.setBackgroundDrawableResource(R.drawable.dialog_dark)
+            window?.let { w ->
+                try {
+                    w.setBackgroundBlurRadius(60) // 真·毛玻璃,部分机型不支持
+                } catch (e: Exception) {
+                    android.util.Log.e("zcode", "blur unsupported", e)
+                }
             }
         }
         dialogRef[0] = dialog
