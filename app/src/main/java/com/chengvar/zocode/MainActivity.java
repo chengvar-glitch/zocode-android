@@ -1,25 +1,34 @@
 package com.chengvar.zocode;
 
+import android.content.ClipboardManager;
 import android.graphics.Color;
 import android.graphics.Insets;
+import android.graphics.PorterDuff;
 import android.graphics.Typeface;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
@@ -30,17 +39,21 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String PREFS = "zocode";
     private static final String KEY_URL = "url";
+    private static final long CONNECT_TIMEOUT_MS = 10_000;
 
     private WebView webView;
-    private LinearLayout inputRow;
     private View homeView;
+    private View loadingView;
     private EditText urlInput;
+
+    private final Handler timeoutHandler = new Handler(Looper.getMainLooper());
+    private boolean mainFrameFailed = false;
+    private boolean connecting = false;
 
     private final ActivityResultLauncher<ScanOptions> scanLauncher =
             registerForActivityResult(new ScanContract(), result -> {
                 String text = result.getContents();
                 if (text != null && !text.isEmpty()) {
-                    urlInput.setText(text);
                     loadUrl(text);
                 }
             });
@@ -54,7 +67,7 @@ public class MainActivity extends AppCompatActivity {
         root.setBackgroundColor(Color.parseColor("#1E1E1E"));
         setContentView(root);
 
-        // 安全区:内容避开状态栏/导航栏/刘海
+        // 沉浸式:系统栏透明,内容按 insets 避让
         root.setOnApplyWindowInsetsListener((v, insets) -> {
             Insets bars;
             if (Build.VERSION.SDK_INT >= 30) {
@@ -66,12 +79,13 @@ public class MainActivity extends AppCompatActivity {
             return insets;
         });
 
-        // ===== 主页:居中品牌区 + 连接区 =====
         homeView = buildHome();
         root.addView(homeView, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        // ===== WebView =====
+        root.addView(buildLoading(), new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
         webView = new WebView(this);
         webView.setBackgroundColor(Color.parseColor("#1E1E1E"));
         webView.getSettings().setJavaScriptEnabled(true);
@@ -81,6 +95,20 @@ public class MainActivity extends AppCompatActivity {
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 return false; // 所有导航留在 app 内
             }
+
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                if (request.isForMainFrame()) {
+                    mainFrameFailed = true;
+                }
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                if (connecting) {
+                    finishConnect(mainFrameFailed);
+                }
+            }
         });
         webView.setWebChromeClient(new WebChromeClient());
         webView.setVisibility(View.GONE);
@@ -89,6 +117,41 @@ public class MainActivity extends AppCompatActivity {
 
         String saved = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_URL, "");
         urlInput.setText(saved);
+        if (!saved.isEmpty()) {
+            // 启动即尝试恢复上次连接,失败则回主页
+            startConnect(saved);
+        }
+    }
+
+    private View buildLoading() {
+        loadingView = new FrameLayout(this);
+        loadingView.setBackgroundColor(Color.parseColor("#1E1E1E"));
+        loadingView.setVisibility(View.GONE);
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(Gravity.CENTER);
+        FrameLayout.LayoutParams boxParams = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER);
+
+        ProgressBar spinner = new ProgressBar(this);
+        spinner.getIndeterminateDrawable().setColorFilter(
+                ContextCompat.getColor(this, R.color.accent), PorterDuff.Mode.SRC_IN);
+        spinner.setLayoutParams(new LinearLayout.LayoutParams(dp(48), dp(48)));
+        box.addView(spinner);
+
+        TextView tip = new TextView(this);
+        tip.setText("正在连接 ZCode…");
+        tip.setTextSize(14);
+        tip.setTextColor(ContextCompat.getColor(this, R.color.text_secondary));
+        LinearLayout.LayoutParams tipParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        tipParams.topMargin = dp(16);
+        box.addView(tip, tipParams);
+
+        ((FrameLayout) loadingView).addView(box, boxParams);
+        return loadingView;
     }
 
     private View buildHome() {
@@ -107,10 +170,9 @@ public class MainActivity extends AppCompatActivity {
         home.addView(text("ZCode", 28, Typeface.BOLD, R.color.text_primary),
                 matchWrap(Gravity.CENTER, 0, dp(20), 0, dp(4)));
 
-        TextView subtitle = text("远程控制", 15, Typeface.NORMAL, R.color.text_secondary);
-        home.addView(subtitle, matchWrap(Gravity.CENTER, 0, 0, 0, dp(40)));
+        home.addView(text("远程控制", 15, Typeface.NORMAL, R.color.text_secondary),
+                matchWrap(Gravity.CENTER, 0, 0, 0, dp(40)));
 
-        // 输入框
         urlInput = new EditText(this);
         urlInput.setHint("粘贴或扫码 ZCode 远程控制链接");
         urlInput.setSingleLine(true);
@@ -120,7 +182,6 @@ public class MainActivity extends AppCompatActivity {
         urlInput.setPadding(dp(16), dp(14), dp(16), dp(14));
         home.addView(urlInput, matchWrap(Gravity.CENTER, 0, 0, 0, dp(16)));
 
-        // 按钮行:扫码 + 打开 各占一半
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
 
@@ -130,25 +191,82 @@ public class MainActivity extends AppCompatActivity {
             opts.setDesiredBarcodeFormats(ScanOptions.QR_CODE);
             opts.setPrompt("对准 ZCode 桌面端弹出的二维码");
             opts.setBeepEnabled(false);
-            opts.setCaptureActivity(PortraitCaptureActivity.class);
             opts.setOrientationLocked(true);
+            opts.setCaptureActivity(PortraitCaptureActivity.class);
             scanLauncher.launch(opts);
         });
         row.addView(scanButton, new LinearLayout.LayoutParams(0, dp(52), 1f));
 
-        Button goButton = darkButton("打开");
-        goButton.setOnClickListener(v -> loadUrl(urlInput.getText().toString().trim()));
-        LinearLayout.LayoutParams goParams = new LinearLayout.LayoutParams(0, dp(52), 1f);
-        goParams.leftMargin = dp(12);
-        row.addView(goButton, goParams);
+        Button pasteButton = darkButton("粘贴连接");
+        pasteButton.setOnClickListener(v -> showPasteDialog());
+        LinearLayout.LayoutParams pasteParams = new LinearLayout.LayoutParams(0, dp(52), 1f);
+        pasteParams.leftMargin = dp(12);
+        row.addView(pasteButton, pasteParams);
 
         home.addView(row, matchWrap(Gravity.CENTER, 0, 0, 0, 0));
 
-        TextView tip = text("在 ZCode 桌面端点击左下角电话图标生成二维码", 12, Typeface.NORMAL, R.color.text_secondary);
-        home.addView(tip, matchWrap(Gravity.CENTER, 0, dp(24), 0, 0));
+        home.addView(text("在 ZCode 桌面端点击左下角电话图标生成二维码", 12, Typeface.NORMAL, R.color.text_secondary),
+                matchWrap(Gravity.CENTER, 0, dp(24), 0, 0));
 
         return home;
     }
+
+    private void showPasteDialog() {
+        final EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setHint("粘贴 ZCode 远程控制链接");
+        input.setText(urlInput.getText().toString());
+        input.setSelection(input.getText().length());
+
+        FrameLayout holder = new FrameLayout(this);
+        int pad = dp(20);
+        holder.setPadding(pad, dp(8), pad, 0);
+        holder.addView(input, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        new AlertDialog.Builder(this, R.style.Theme_AppCompat_Dialog_Alert)
+                .setTitle("粘贴连接")
+                .setView(holder)
+                .setNegativeButton("取消", null)
+                .setPositiveButton("访问", (dialog, which) -> loadUrl(input.getText().toString().trim()))
+                .show();
+    }
+
+    // ===== 页面状态切换 =====
+
+    private void showOnly(View target) {
+        homeView.setVisibility(target == homeView ? View.VISIBLE : View.GONE);
+        loadingView.setVisibility(target == loadingView ? View.VISIBLE : View.GONE);
+        webView.setVisibility(target == webView ? View.VISIBLE : View.GONE);
+    }
+
+    private void startConnect(String url) {
+        connecting = true;
+        mainFrameFailed = false;
+        showOnly(loadingView);
+        webView.loadUrl(url);
+        timeoutHandler.postDelayed(() -> {
+            if (connecting) {
+                mainFrameFailed = true;
+                finishConnect(true);
+            }
+        }, CONNECT_TIMEOUT_MS);
+    }
+
+    private void finishConnect(boolean failed) {
+        connecting = false;
+        timeoutHandler.removeCallbacksAndMessages(null);
+        if (failed) {
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().remove(KEY_URL).apply();
+            urlInput.setText("");
+            showOnly(homeView);
+            Toast.makeText(this, "无法连接 ZCode,请重新扫码或粘贴链接", Toast.LENGTH_LONG).show();
+        } else {
+            showOnly(webView);
+        }
+    }
+
+    // ===== 通用 UI 构建 =====
 
     private TextView text(String s, int sp, int style, int colorRes) {
         TextView tv = new TextView(this);
@@ -189,9 +307,8 @@ public class MainActivity extends AppCompatActivity {
             url = "https://" + url;
         }
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_URL, url).apply();
-        homeView.setVisibility(View.GONE);
-        webView.setVisibility(View.VISIBLE);
-        webView.loadUrl(url);
+        urlInput.setText(url);
+        startConnect(url);
     }
 
     @Override
@@ -199,8 +316,7 @@ public class MainActivity extends AppCompatActivity {
         if (webView.getVisibility() == View.VISIBLE && webView.canGoBack()) {
             webView.goBack();
             if (!webView.canGoBack()) {
-                webView.setVisibility(View.GONE);
-                homeView.setVisibility(View.VISIBLE);
+                showOnly(homeView);
             }
         } else {
             super.onBackPressed();
