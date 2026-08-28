@@ -118,7 +118,16 @@ class MainActivity : AppCompatActivity() {
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) = false
                 override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
-                    if (request.isForMainFrame) mainFrameFailed = true
+                    if (!request.isForMainFrame) return
+                    mainFrameFailed = true
+                    // 连接后桌面端关掉:自动回主页让用户重新扫码/粘贴
+                    if (!connecting) {
+                        prefs.edit().remove(KEY_URL).apply()
+                        runOnUiThread {
+                            showOnly(homeView)
+                            Toast.makeText(this@MainActivity, "连接已断开,请重新扫码或粘贴链接", Toast.LENGTH_LONG).show()
+                        }
+                    }
                 }
                 override fun onPageFinished(view: WebView, url: String) {
                     if (connecting) finishConnect(failed = mainFrameFailed)
